@@ -33,11 +33,9 @@ Task 2: Setting up Machines
 sudo su
 
  
-#Download the script to install and configure kubeadm using the link on all the 3 instances.
+#install and configure kubeadm using the link on all the 3 instances.
 
-wget https://ckad.s3.ap-northeast-1.amazonaws.com/kubeadm-setup.sh
 
-#OR
 #Create kubeadm.sh script file
 vi kubeadm.sh
 ------------------------------------------------------------------------------------
