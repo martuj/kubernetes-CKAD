@@ -1,1 +1,1291 @@
-CKAD
+
+
+CKAD-Cheat-sheet.txt
+
+======================================================================================================================
+Lab 1: Bootstrap a Kubernetes Cluster using Kubeadm.
+
+-----------------------------------------------------------------------
+Task 1: Launching Instances on AWS
+-----------------------------------------------------------------------
+
+#3 VMs
+
+#Instance type t2.medium
+
+#Instead of opening all ports you can open these ports internally.
+
+Nodes	          Port Number	          Use Case
+Master, Workers	   2379               etcd Client API
+Master, Workers    2380    	   Etcd Server API
+Master	           6443	           Kubernetes API Server (Secure Port)
+Master, Workers	   6782 – 6784     Weave Net Server/Client API #CNI
+Master, Workers	   10250 – 10255   Kubelet Communication
+Workers	           30000 – 32767   Reserved of NodePort Ips
+
+-----------------------------------------------------------------------
+Task 2: Setting up Machines
+-----------------------------------------------------------------------
+#All steps in this task are to be performed on all the machines.
+#connect all VMs with putty
+
+#Switch to root.
+sudo su
+
+ 
+#Download the script to install and configure kubeadm using the link on all the 3 instances.
+
+wget https://ckad.s3.ap-northeast-1.amazonaws.com/kubeadm-setup.sh
+
+#OR
+#Create kubeadm.sh script file
+vi kubeadm.sh
+------------------------------------------------------------------------------------
+#!/bin/bash
+sudo apt-get update
+sudo apt-get install apt-transport-https ca-certificates curl gnupg-agent software-properties-common -y
+sudo apt install docker.io -y
+sudo usermod -aG docker ubuntu
+
+sudo cat > /etc/docker/daemon.json <<EOF
+{
+  "exec-opts": ["native.cgroupdriver=systemd"],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "1024m"
+  },
+  "storage-driver": "overlay2"
+}
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+
+sudo echo "Environment=cgroup-driver=systemd/cgroup-driver=cgroupfs" >> /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+
+sudo curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+sudo echo 'deb http://apt.kubernetes.io/ kubernetes-xenial main' >> /etc/apt/sources.list.d/kubernetes.list
+sudo apt-get update
+sudo apt-get install -y kubelet=1.23.0-00 kubeadm=1.23.0-00 kubectl=1.23.0-00
+
+--------------------------------------------------------------------------------------
+#save the file using "ESCAPE + :wq!"
+
+
+#Run the script to setup and configure kubeadm on all 3 instances.
+
+bash kubeadm-setup.sh
+
+-----------------------------------------------------------------------
+Task 3: Initializing the Cluster
+-----------------------------------------------------------------------
+#Set the hostname to all the three nodes as master, worker1, worker2 in their respective terminals for easy understanding, by running the below command:
+
+#on control node(master)
+hostnamectl set-hostname master  
+
+#on Worker node-1
+hostnamectl set-hostname worker1
+
+
+#on Worker node-2
+hostnamectl set-hostname worker2
+
+#Start kubeadm only on master.
+kubeadm init
+
+
+If it runs successfully, it will provide a join command which can be used to join the master. Make a note of the highlighted part.
+---------------------------------------------------------------------------
+#If you want to list and generate tokens again to join worker nodes, then follow the below steps.
+
+kubeadm token list
+kubeadm token create  --print-join-command
+ 
+----------------------------------------------------------------------- 
+Task 4: Joining a Cluster
+-----------------------------------------------------------------------
+
+#Run the kubeadm join command in worker nodes, that was previously noted from the
+master node in the previous task.
+
+kubeadm join --token <your_token> --discovery-token-ca-cert- hash <your_discovery_token>
+
+ 
+#Run the following commands to configure kubectl on master.
+
+mkdir -p $HOME/.kube
+cp -i /etc/kubernetes/admin.conf $HOME/.kube/config 
+chown $(id -u):$(id -g) $HOME/.kube/config
+
+OR
+
+#Alternatively, if you are the root user, you can run:
+export KUBECONFIG=/etc/kubernetes/admin.conf
+
+
+#View node information on the master. The nodes will not be ready.
+kubectl get nodes
+     
+
+
+
+
+----------------------------------------------------------------------- 
+Task 5: Deploy Container Networking Interface
+
+----------------------------------------------------------------------- 
+# Apply weave CNI (Container Network Interface) as shown below:
+kubectl apply -f https://github.com/weaveworks/weave/releases/download/v2.8.1/weave-daemonset-k8s.yaml
+
+(reference link1:- https://www.weave.works/docs/net/latest/kubernetes/kube-addon/)
+
+
+
+#View nodes to see that they are ready.
+kubectl get nodes
+
+#View all Pods including system Pods and see that dns and weave are running.
+kubectl get pod -n kube-system
+
+
+     
+
+
+----------------------------------------------------------------------- 
+Task 6: Create Pods
+
+----------------------------------------------------------------------- 
+#Create a Pod called http based on a Docker image on the master.
+kubectl run httpd --image=httpd
+
+#View the status of Pod and make sure it’s in the running state.
+kubectl get pods
+
+
+#Get a shell to the container in the Pod using the Pod name from the previous step.
+kubectl exec -it <pod_name> -- /bin/bash
+i.e
+kubectl exec -it httpd -- /bin/bash
+
+   
+
+#Install curl in the container.
+apt update
+apt install curl -y
+
+
+#Run curl on the localhost (container) to verify the http installation.
+curl localhost 
+exit
+ 
+
+
+
+
+
+
+===================================================================================
+Lab 2: Jobs and Cronjobs in Kubernetes
+
+-----------------------------------------------------------------------
+Task 1: Jobs in kubernetes 
+----------------------------------------------------------------------- 
+vi job-pod.yaml
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: jobs-hello
+spec:
+  template:
+    metadata:
+      name: jobs-pod
+    spec:
+      containers:
+      - name: jobs-ctr
+        image: busybox
+        args:
+        - /bin/sh
+        - -c
+        - echo HELLO WORLD !!!!!
+      restartPolicy: Never
+
+kubectl create -f job.yaml
+kubectl get jobs
+kubectl get pods
+
+read logs 
+kubectl logs jobs-hello-7cfn2 
+HELLO WORLD !!!!!
+
+Describe job to see
+kubectl describe jobs jobs-hello
+
+kubectl delete -f job.yaml
+-----------------------------------------------------------------------
+Task 2: Cronjobs 
+-----------------------------------------------------------------------
+#Create a yaml called cron.yaml. Use the content given below to fill the file
+
+vi cron.yaml
+ 
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cronjob-hello
+spec:
+  schedule: "*/1 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: cronjob-ctr
+            image: busybox
+            args:
+            - /bin/sh
+            - -c
+            - echo Hello World!
+          restartPolicy: OnFailure
+
+kubectl create -f cronjob.yaml
+
+kubectl get cronjobs.batch 
+NAME            SCHEDULE      SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+cronjob-hello   */1 * * * *   False     0        28s             42s
+
+kubectl get pod
+NAME                           READY   STATUS      RESTARTS   AGE
+cronjob-hello-27991419-lz69c   0/1     Completed   0          42s
+
+kubectl logs cronjob-hello-27991419-lz69c 
+Hello World!
+
+==============================================================================
+
+Lab 2: Sidecar container and Patterns
+
+Task: 1 sidecar container
+
+vi sidecar.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-sidecar
+spec:
+  containers:
+  - name: app-container
+    image: ubuntu:latest
+    command: ["/bin/sh"]
+    args: ["-c","while true; do date >> /var/log/app.txt; sleep 5; done"]
+    volumeMounts:
+    - name: share-logs
+      mountPath: /var/log/
+  - name: sidecar-container
+    image: nginx:latest
+    ports:
+    - containerPort: 80
+    volumeMounts:
+    - name: share-logs
+      mountPath: /usr/share/nginx/html
+  volumes:
+  - name: share-logs
+    emptyDir: {}
+	
+	
+kubectl create -f sidecar.yaml
+kubectl get pod
+
+kubectl exec -it pod-sidecar -c sidecar-container -- bash
+install curl
+apt update && apt install curl -y
+ 
+curl 'http://localhost:80/app.txt'
+ 
+==============================================================================
+Lab 4 Canary Deployment on Kubernetes 
+
+vi web-blue.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-blue
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web-blue
+      type: web-app
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: web-blue
+        type: web-app
+    spec:
+      containers:
+      - image: mandarct/web-blue:v1
+        name: web-blue
+        ports:
+        - containerPort: 80
+          protocol: TCP
+		 
+kubectl create -f web-blue.yaml
+kubectl get deploy
+kubectl get pods
+
+Now create NodePort service to access application
+
+		 
+vi svc-web-lb.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-app-svc-lb
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    type: web-app
+  type: NodePort
+  ports:
+   - port: 80
+     targetPort: 80
+	 
+kubectl create -f svc-web-lb.yaml
+kubectl get svc
+
+access you application
+
+
+to it canary deployment deploy following yaml file
+
+vi web-green.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-green
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web-green
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: web-green
+        type: web-app
+    spec:
+      containers:
+      - image: mandarct/web-green:v1
+        name: web-green
+        ports:
+        - containerPort: 80
+          protocol: TCP
+
+kubectl create -f web-green.yaml
+kubectl get deployment
+kubectl get pods
+
+access this application using same service that we create previously.
+
+some time will to blue deployment web page, some time green webpage
+
+If you delete the web-green deployment, load-balancer will start sending traffic only to the blue pods
+
+
+kubectl describe svc web-app-svc-lb
+
+==================================================================================
+Lab 5: Liveness and Readiness probes
+
+Task 1: Liveness probes
+-------------------------------		  
+vi liveness-pod.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: lns
+  name: liveness-pod
+spec:
+  containers:
+  - name: liveness
+    image: busybox
+    args:
+    - /bin/sh
+    - -c
+    - touch /liveness; sleep 6000
+    livenessProbe:
+      exec:
+        command:
+        - cat
+        - /liveness
+      initialDelaySeconds: 5
+      periodSeconds: 5
+	  
+kubectl get pods	  
+kubectl describe pod liveness-exec
+ 
+now login to container and delete following file
+kubectl exec -it liveness-pod sh 
+# rm -f /liveness
+# exit
+
+kubectl get pods
+you can see pod is getting restarted
+
+ 
+Task 2: Readiness probe
+------------------------------------------ 
+
+vi readiness.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: rns
+  name: readiness-pod
+spec:
+  containers:
+  - name: readiness
+    image: nginx
+    args:
+    - /bin/bash
+    - -c
+    - service nginx start; touch /readiness; sleep 6000
+    readinessProbe:
+      exec:
+        command:
+        - cat
+        - /readiness
+      initialDelaySeconds: 5
+      periodSeconds: 5
+	  
+kubectl create -f readiness.yaml
+kubectl get pods
+
+
+login inside pod and delete folloing file 
+
+kubectl exec -it readiness-pod bash 
+# rm -f /readiness
+# exit
+
+
+View the Pod events and see that readiness probe has failed
+kubectl describe pods readiness-pod
+
+now describe service
+kubectl describe svc readiness-svc
+
+End point is gone
+
+===================================================================================
+
+
+Lab 7: ConfigMap
+
+Task 1: Setting container environment variables using configmap
+-----------------------------------------------------------------
+
+imperative way to create config-map in environment variables:
+
+kubectl create configmap my-configmap --from-literal mydata=hello_world --dry-run=client -o yaml
+
+vi config-map.yaml
+
+apiVersion: v1
+data:
+  mydata: hello_world
+kind: ConfigMap
+metadata:
+  name: my-configmap
+
+kubectl create -f config-map.yaml
+ kubectl get configmaps
+
+
+vi cm-pod.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cm-pod
+spec:
+  containers:
+  - name: quota-ctr
+    image: nginx:latest
+    ports:
+    - containerPort: 80
+    env:
+    - name: hlo
+      valueFrom:
+        configMapKeyRef:
+           name: my-configmap
+           key: mydata
+		   
+kubectl exec -it cm-pod -- bash
+echo $hlo
+hello_world
+exit
+
+----------------------------------------------------------------
+
+Task 2: Setting configuration file with volume using ConfigMap
+----------------------------------------------------------------
+vi redis-cm.yaml
+ 
+apiVersion: v1
+data:
+  redis-config: |
+    maxmemory 2mb
+    maxmemory-policy allkeys-lru
+kind: ConfigMap
+metadata:
+  name: example-redis-config
+  namespace: default
+
+kubectl create -f redis-cm.yaml 
+kubectl get cm
+kubectl describe cm example-redis-config 
+
+Create pod
+
+vi redis-pod.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: redis
+spec:
+  containers:
+  - name: redis
+    image: redis
+    env:
+    - name: MASTER
+      value: "true"
+    ports:
+    - containerPort: 6379
+    volumeMounts:
+    - mountPath: /redis-master-data
+      name: data
+    - mountPath: /redis-master
+      name: config
+  volumes:
+    - name: data
+      emptyDir: {}
+    - name: config
+      configMap:
+        name: example-redis-config
+        items:
+        - key: redis-config
+          path: redis.conf
+
+kubectl create -f redis-pod.yaml
+read config map's file 
+kubectl exec -it redis cat /redis-master/redis.conf
+
+-------------------------------------------------------------------------------
+Task 3: Creating a Secret
+-------------------------------------------------------------------------------
+vi secrets.yaml
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-credentials
+type: Opaque
+data:
+  ##all below values are base64 encoded
+  ##rootpw is root
+  ##user is user
+  ##password is mypwd
+  rootpw: cm9vdAo=
+  user: dXNlcgo=
+  password: bXlwd2QK
+  
+kubectl create -f secrets.yaml
+kubectl get secrets
+kubectl describe secrets mysql-credentials
+see your encoded secrets 
+kubectl get secrets mysql-credentials -o yaml
+
+Task: 4 create pod with secret
+
+vi secret-pod.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: secret-pod
+spec:
+  containers:
+  - name: quota-ctr
+    image: nginx:latest
+    ports:
+    - containerPort: 80
+    envFrom:
+    - secretRef:
+        name: mysql-credentials
+
+=====================================================================================
+Lab 8: Resource Quotas in Kubernetes
+-------------------------------------------------
+Task 1: Creating a Namespace
+-------------------------------------------------
+kubectl create namespace quotas
+kubectl get ns
+kubectl describe ns quotas
+-------------------------------------------------
+Task 2: Creating a resourcequota
+-------------------------------------------------
+vi rq-quotas.yaml
+
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: quota
+  namespace: quotas
+spec:
+  hard:
+    requests.cpu: "1"
+    requests.memory: 1Gi
+    limits.cpu: "2"
+    limits.memory: 2Gi
+
+kubectl create -f rq-quotas.yaml
+kubectl describe ns resourcequota
+
+
+------------------------------------------------
+Task 3: Verify resourcequota Functionality
+-------------------------------------------------
+vi rq-pod.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: quota-pod
+  namespace: quotas
+spec:
+  containers:
+  - name: quota-ctr
+    image: nginx
+    resources:
+      limits:
+        memory: "800Mi"
+        cpu: "1000m"
+      requests:
+        memory: "600Mi"
+        cpu: "350m"
+    ports:
+      - containerPort: 80
+	  
+kubectl create -f rq-pod.yaml
+kubectl describe ns resourcequota
+kubectl get resourcequota -n quotas -o yaml
+
+-------------------------------------------------
+Task 4: Limiting Number of Pods
+-------------------------------------------------
+kubectl edit resourcequotas quota -n quotas
+add following lines in spec: > hard:
+count/deployments.apps: 2
+count/replicasets.apps: 3
+
+-------------------------------------------------
+Task 5: Clean-up
+-------------------------------------------------
+#Delete the quota to clean up.
+kubectl delete ns quotas
+
+=================================================================================
+
+Lab 9: Pod and Container level security using Context
+---------------------------------------------------------
+Task 1: Set the security context for a pod
+---------------------------------------------------
+vi sc-pod.yml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sc-pod
+spec:
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 3000
+    fsGroup: 2000
+  volumes:
+    - name: sc-vol
+      emptyDir: {}
+  containers:
+    - name: sc-ctr
+      image: busybox
+      command:
+        - sh
+        - -c
+        - sleep 1h
+      volumeMounts:
+        - name: sc-vol
+          mountPath: /data/demo
+      securityContext:
+        allowPrivilegeEscalation: false
+  
+kubectl create -f sc-pod.yml
+kubectl exec -it sc-pod -- sh
+ps 
+cd /data
+ls
+cd demo
+echo hello > testfile
+ls -l
+id
+
+---------------------------------------------------
+Task 2: Set the security context for a container
+---------------------------------------------------
+
+vi sc-ctr.yml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sc-pod2
+spec:
+  containers:
+  - name: sc-ctr2
+    image: gcr.io/google-samples/node-hello:1.0
+    securityContext:
+      runAsUser: 2000
+      allowPrivilegeEscalation: false
+	  
+
+kubectl create -f sc-ctr.yml
+
+kubectl get pods
+kubectl exec -it sc-pod2 -- sh
+ps aux
+exit
+
+#Delete the resources that we created in this lab
+kubectl delete -f sc-pod.yml 
+kubectl delete -f sc-ctr.yml
+
+
+
+=================================================================================
+
+Lab 10: Kubernetes Network Policy
+
+--------------------------------------------------
+Task 1: Network policy with Pod labels
+--------------------------------------------------
+#Create a nginx pod and service with labels role=backend
+
+kubectl run backend --image nginx -l role=backend
+kubectl expose po backend --port 80 
+
+kubectl get pod
+kubectl get svc
+
+#Create a new busybox pod and verify that it can access the backend service.
+Then, exit out of the container
+
+kubectl run --rm -it --image=busybox net-policy 
+wget -qO- -T3 http://backend
+exit
+
+#Create a network policy which uses labels to deny all ingress traffic
+
+vi np-deny-all.yml
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-policy
+spec:
+  podSelector:
+    matchLabels:
+      role: backend
+  ingress: []
+
+kubectl create -f np-deny-all.yml
+kubectl get networkpolicies
+
+#Create a new busybox pod again and verify that it cannot access the backend service
+
+kubectl run --rm -it --image=busybox net-policy
+wget -qO- -T3 http://backend
+it will show timeout
+exit
+
+#Modify the network policy to allow traffic with matching Pod labels 
+Inspect the network policy and notice the selectors
+
+vi np-pod-label-allow.yml
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-policy
+spec:
+  podSelector:
+    matchLabels:
+      role: backend
+  ingress:
+  - from:
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          role: frontend
+		  
+
+#before applying this yaml describe networkpolicies to check rule
+
+kubectl describe networkpolicies backend-policy
+
+kubectl apply -f np-pod-label-allow.yml
+
+kubectl describe networkpolicies backend-policy
+
+#Run the busybox pod again and verify that it is able to access backend service.
+Notice the labels on the Pod. Inspect the network policy and notice the selectors
+
+kubectl run --rm -it --image=busybox --labels role=frontend net-policy
+wget -qO- -T3 http://backend
+exit
+#Run the busybox pod again without labels and notice that the backend service is not accessible any more.
+
+kubectl run --rm -it --image=busybox net-policy 
+wget -qO- -T3 http://backend
+exit
+
+
+--------------------------------------------------------
+Task 2: Using WordPress and MySQL as Deployments(skip)
+--------------------------------------------------------
+kubectl create ns networkdemo 
+
+kubectl create -f http://files.cloudthat.training/devops/kubernetes-cka/mysql_deploy.yaml -n networkdemo
+
+kubectl create -f http://files.cloudthat.training/devops/kubernetes-cka/wordpress_deploy.yaml -n networkdemo
+
+kubectl get pod,svc -n networkdemo 
+
+vim deny-all.yaml 
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: networkdemo
+spec:
+  podSelector:
+    matchLabels: {}
+  policyTypes:
+  - Ingress
+
+kubectl apply -f deny-all.yaml -n networkdemo
+
+
+==================================================================================
+
+Lab 11: RBAC
+--------------------------------------------------------------------
+Task 1: Create a new ServiceAccount demo-sa
+---------------------------------------------------------------------
+kubectl get ns
+kubectl create ns purple
+kubectl create sa -n purple demo-sa 
+kubectl get ns
+
+---------------------------------------------------------------------
+Task 2: Create a new Role and RoleBinding 
+---------------------------------------------------------------------
+kubectl create role demo-role --verb=list --resource=pods -n purple
+kubectl create rolebinding demo-rb --role=demo-role --serviceaccount=purple:demo-sa -n purple
+
+---------------------------------------------------------------------
+Task 3: Test whether you are able to do a GET request to Kubernetes API 
+---------------------------------------------------------------------
+kubectl run test --image=nginx -n purple
+kubectl exec -it -n purple test -- /bin/bash 
+curl -v --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kubernetes.default/api/v1/namespaces/purple/pods 
+
+vi pod-sa.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-01
+  namespace: purple
+spec:
+  serviceAccountName: demo-sa
+  containers:
+  - name: my-container
+    image: nginx
+
+kubectl exec -it -n purple test-01 -- /bin/bash 
+curl -v --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kubernetes.default/api/v1/namespaces/purple/pods 
+
+
+==================================================================================
+Lab 12: Node Labelling and Constraining pods in Kubernetes
+
+---------------------------------------------------------------------
+Task 1: Deploy pod in specific node based on node-name / hostname
+---------------------------------------------------------------------
+
+vi node-name.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-nodename
+  labels:
+    env: test
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    imagePullPolicy: IfNotPresent
+  nodeName: {node-name / hostname }
+
+kubectl create -f node-name.yaml
+kubectl get pods -o wide 
+see your pod in defined node
+ 
+---------------------------------------------------------------------
+Task 1.1: Node labeling and constraining pods
+---------------------------------------------------------------------
+list node labels
+kubectl get nodes --show-labels
+
+kubectl label nodes <node_name> disktype=ssd
+
+list you nodes to check labels 
+kubectl get nodes --show-labels | grep "disktype=ssd"
+
+vi nlns-pod.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nlns-nginx-pod
+  labels:
+    env: test
+spec:
+  containers:
+  - name: nlns-nginx-ctr
+    image: nginx
+  nodeSelector:
+    disktype: ssd
+
+
+kubectl apply -f nlns-pod.yaml
+kubectl get pods -o wide
+
+---------------------------------------------------------------------
+Task 2: Cleanup
+---------------------------------------------------------------------
+#Delete the objects created in this lab.
+
+kubectl delete -f nlns-pod.yaml 
+kubectl label nodes <node_name> disktype-
+ 
+#Verify that the label is deleted.
+
+kubectl get nodes --show-labels | grep ssd 
+
+
+====================================================================================
+Lab 13: Advanced Pod Scheduling
+
+---------------------------------------------------------------------
+Task 1: Node Affinity
+---------------------------------------------------------------------
+vi node-aff-pref.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: na-nginx-pod1
+spec:
+  containers:
+  - name: na-nginx-ctr1
+    image: nginx
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 1
+        preference:
+          matchExpressions:
+          - key: disktype
+            operator: In
+            values:
+            - ssd
+
+kubectl apply -f node-aff-pref.yaml
+kubectl get pods -o wide
+
+Remove node label 
+
+kubectl label nodes <node_name> disktype-
+deploy same pod again it is getting deployed
+
+Task 2: required during scheduling
+
+remove label first 
+kubectl label nodes <node_name> disktype-
+
+
+vi aff-na-pod2.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: na-nginx-pod2
+spec:
+  containers:
+  - name: na-nginx-ctr2
+    image: nginx
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: disktype
+            operator: In
+            values:
+            - ssd
+
+kubectl create -f aff-na-pod2.yaml
+
+pod is strictly looking for labeled node
+
+kubectl get pods -o wide
+kubectl label nodes <node_name> disktype=ssd
+
+once label is added pod will deployed
+
+---------------------------------------------------------------------
+Task 2: Pod Affinity
+---------------------------------------------------------------------
+
+vi depend-pod.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pa-nginx-pod1
+  labels:
+    app: pa-nginx-app
+spec:
+  containers:
+  - name: pa-nginx-ctr1
+    image: nginx
+
+kubectl create -f depend-pod.yaml
+kubectl get pods
+
+---------------------------------------------------------------------
+Task 3: create pod with pod affinity
+---------------------------------------------------------------------
+vi aff-pa-pod2.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pa-nginx-pod2
+spec:
+  containers:
+  - name: pa-nginx-ctr2
+    image: nginx
+  affinity:
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - pa-nginx-app
+        topologyKey: kubernetes.io/hostname
+
+kubectl create -f pod-affinity.yaml
+
+kubectl get pods -o wide
+both pod are in same node
+
+---------------------------------------------------------------------
+Task 4: pod anti affinity
+---------------------------------------------------------------------
+
+vi pod-antiaff.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - pa-nginx-app
+            topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: nginx
+        image: nginx
+
+kubectl create -f  pod-antiaff.yaml
+kubectl get pod -o wide 
+
+
+kubectl delete -f  pod-antiaff.yaml
+ 
+
+===================================================================================
+Lab 14: Installing WordPress with Helm
+
+-----------------------------------------------------------------------
+Task 1: Helm setup
+-----------------------------------------------------------------------
+#Download the shell script for the installation of the Helm package manager and run it.
+wget  https://s3.ap-south-1.amazonaws.com/files.cloudthat.training/devops/kubernetes-essentials/helm.sh
+bash helm.sh
+helm version
+
+
+
+-----------------------------------------------------------------------
+Task 2: Setup WordPress
+-----------------------------------------------------------------------
+#Add bitnami repository to helm which contains WordPress chart.
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+helm repo list
+ 
+#Search for WordPress package from the repository and install the WordPress chart with release name wordpress-chart. You can name it as you want.
+helm search repo wordpress
+helm install wordpress-chart bitnami/wordpress
+
+
+#Perform helm fetch to get the WordPress compressed file to the working directory. Perform ls and verify that a compressed WordPress file is present in PWD.
+helm fetch bitnami/wordpress
+ls
+ 
+#Extract the compressed file using the below command.
+tar -xvzf wordpress-12.2.1.tgz
+
+
+#Now, deploy the WordPress using helm install command.  This will set up the pods and services for WordPress.
+helm install wordpress --generate-name
+
+ 
+-----------------------------------------------------------------------
+Task 3: Verify that WordPress has been set up 
+-----------------------------------------------------------------------
+
+#Verify that the pods are running.
+kubectl get pods
+ 
+ 
+
+#Now Notice that MariaDB (database) pods are part of statefulset.
+kubectl get sts
+kubectl describe sts
+ 
+ 
+
+#Also Notice that the front end of wordpress are part of deployment.
+kubectl get deploy
+
+#View the services using the below commands.
+#Make note of the EXTERNAL IP of the LoadBalancer service.
+kubectl get svc
+kubectl get svc --namespace default -w wordpress-1637763307
+ 
+
+#Open the browser and paste the service endpoint noted on the previous step. Observe that the WordPress site is up and running.
+
+ 
+-----------------------------------------------------------------------
+Task 4: Cleanup
+-----------------------------------------------------------------------
+
+#List the current helm release and delete it
+helm ls
+helm delete <helm_Release_Name >
+helm ls
+
+ 
+ 
+
+==================================================================
+
+**** Helm Chart ****
+
+Installing Helm 3 in Ubuntu Linux and installing wordpress (LAMP) application through Helm.
+
+apt update
+wget https://get.helm.sh/helm-v3.11.3-linux-386.tar.gz
+ls
+tar -xvzf helm-v3.11.3-linux-386.tar.gz 
+ls
+cd linux-386/
+ls
+mv helm /bin/
+helm list
+helm rpo
+helm repo
+clear
+helm repo list
+helm repo add my-repo https://charts.bitnami.com/bitnami
+helm repo list
+helm install my-word my-repo/wordpress
+clear
+helm list
+kubectl get all
+kubectl edit svc my-word-wordpress
+kubectl get all
+clear
+kubectl get secrets
+helm list
+helm status my-word
+echo  $(kubectl get secret --namespace default my-word-wordpress -o jsonpath="{.data.wordpress-password}" | base64 -d)
+clear
+kubectl get secrets
+kubectl edit secrets my-word-wordpress 
+echo "R3pOeHlIaUd6Vg==" | base64 -d
+echo  $(kubectl get secret --namespace default my-word-wordpress -o jsonpath="{.data.wordpress-password}" | base64 -d)
+
+https://6263e829-a7a4-4687-9929-08f161cccf69-10-244-3-2-31730.papa.r.killercoda.com/wp-admin/
+
+
