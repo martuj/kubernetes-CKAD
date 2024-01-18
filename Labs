@@ -640,6 +640,19 @@ spec:
     - secretRef:
         name: mysql-credentials
 
+kubectl create -f secret-pod.yaml
+
+kubectl get pods
+
+To check created secrets
+kubectl get secret
+
+To describe a secret
+kubectl describe secret <secret-name>
+
+To decode the encrypted data
+echo "<data>" | base64 -d
+
 =====================================================================================
 Lab 8: Resource Quotas in Kubernetes
 -------------------------------------------------
