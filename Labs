@@ -913,10 +913,189 @@ spec:
 
 kubectl apply -f deny-all.yaml -n networkdemo
 
+==================================================================================
+Lab 11: RBAC 
+=================
+The role.yaml file contains the configuration for creating a role named pod-reader. 
+The role allows the user to perform actions like get, watch, and list on pods resources.
+
+vi role.yaml 
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: pod-reader
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "watch", "list"]
+
+To apply this role:
+kubectl apply -f role.yaml
+To check the created role:
+kubectl get role
+
+Role Binding
+-----------
+The rolebinding.yaml file defines a role binding named read-pods
+that binds the pod-reader role to the user jack in the default namespace.
+
+vi rolebinding.yaml
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: read-pods
+  namespace: default
+subjects:
+- kind: User
+  name: jack
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: pod-reader
+  apiGroup: rbac.authorization.k8s.io
+
+To apply this role binding:
+kubectl apply -f rolebinding.yaml
+To check the created role binding:
+kubectl get rolebinding
+To check the permissions of the jack user:
+kubectl auth can-i get pod --as jack
+
+
+==========================================================
+Cluster Role
+==========================================================
+The clusterrole.yaml file contains the configuration for creating a cluster role named secret-reader. 
+This cluster role allows the user to perform actions like get, watch, and list on secrets resources.
+
+vi clusterrole.yaml
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: secret-reader
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "watch", "list"]
+
+To apply this cluster role:
+kubectl apply -f clusterrole.yaml
+To check the created cluster role:
+kubectl get clusterrole | grep secret-reader
+
+Cluster Role Binding
+=====================
+The clusterrolebinding.yaml file contains the configuration for creating a cluster role binding named read-secrets-global. 
+This cluster role binding binds the secret-reader cluster role to the user riya globally.
+
+vi clusterrolebinding.yaml
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: read-secrets-global
+subjects:
+- kind: User
+  name: riya
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: secret-reader
+  apiGroup: rbac.authorization.k8s.io
+
+To apply this cluster role binding:
+kubectl apply -f clusterrolebinding.yaml
+
+To check the created cluster role binding:
+kubectl get clusterrolebinding | grep read-secrets-global
+
+To check the permissions of the riya user across all namespaces:
+kubectl auth can-i get secret --as riya -A
 
 ==================================================================================
+==================================================================================
+Setting Up Your Service Account
+====================================================================================
+To create a Service Account, use the following commands:
+kubectl create sa mysa
 
-Lab 11: RBAC
+To create a token for the Service Account "mysa" :
+kubectl create token mysa
+
+Defining Permissions with Roles
+
+
+vi sarole.yaml
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: pod-reader
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - pods
+  verbs:
+  - get
+  - watch
+  - list
+
+kubectl apply -f sarole.yaml 
+
+To associate the Role with the Service Account, create a RoleBinding. 
+
+vi sarolebinding.yaml
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: read-pods
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: mysa
+  namespace: default
+roleRef:
+  kind: Role
+  name: pod-reader
+  apiGroup: rbac.authorization.k8s.io
+
+kubectl apply -f sarolebinding.yaml 
+
+
+Pod definition with the appropriate serviceAccountName. 
+
+vi podattach.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+spec:
+  serviceAccountName: mysa
+  containers:
+  - name: nginx
+    image: nginx:1.14.2
+    ports:
+    - containerPort: 80
+
+kubectl apply -f podattach.yaml 
+
+
+Ensuring Access: Verifying Permissions
+
+To verify the access permissions of the Service Account, use the following command:
+kubectl describe pod nginx
+kubectl auth can-i get pods --as=system:serviceaccount:default:mysa
+
+=====================================================================================
+: RBAC (Self)
 --------------------------------------------------------------------
 Task 1: Create a new ServiceAccount demo-sa
 ---------------------------------------------------------------------
