@@ -730,72 +730,125 @@ Lab 9: Pod and Container level security using Context
 ---------------------------------------------------------
 Task 1: Set the security context for a pod
 ---------------------------------------------------
-vi sc-pod.yml
+File 1: sc-demo-1.yaml
+This YAML file demonstrates the implementation of security context at the pod level.
+
+vi sc-demo-1.yaml
 
 apiVersion: v1
 kind: Pod
 metadata:
-  name: sc-pod
+  name: security-context-demo
 spec:
   securityContext:
     runAsUser: 1000
     runAsGroup: 3000
     fsGroup: 2000
   volumes:
-    - name: sc-vol
-      emptyDir: {}
+  - name: demo-vol
+    emptyDir: {}
   containers:
-    - name: sc-ctr
-      image: busybox
-      command:
-        - sh
-        - -c
-        - sleep 1h
-      volumeMounts:
-        - name: sc-vol
-          mountPath: /data/demo
-      securityContext:
-        allowPrivilegeEscalation: false
-  
-kubectl create -f sc-pod.yml
-kubectl exec -it sc-pod -- sh
-ps 
-cd /data
-ls
-cd demo
-echo hello > testfile
-ls -l
+  - name: sc-demo
+    image: busybox:1.28
+    command: [ "sh", "-c", "sleep 1h" ]
+    volumeMounts:
+    - name: demo-vol
+      mountPath: /data/demo
+
+To apply this file, use the following command:
+kubectl apply -f sc-demo-1.yaml
+
+To access the shell inside the pod, run the following command:
+kubectl exec -it security-context-demo -- /bin/sh
+
+
+To check the user ID, group ID, and filesystem ID, run the following commands:
 id
+ps aux
+
+The id command displays the user ID and group ID of the current user running inside the pod. 
+The ps aux command shows the processes running inside the pod along with their details.
+
+Since a volume is mounted, you can navigate to the mounted directory and perform file operations:
+cd /data/demo
+echo hello devopspro >> myfile
+ls -l
 
 ---------------------------------------------------
 Task 2: Set the security context for a container
 ---------------------------------------------------
 
-vi sc-ctr.yml
+File 2: sc-demo-2.yaml
+This YAML file demonstrates the implementation of security context at both the pod and container level.
+
+vi sc-demo-2.yaml
 
 apiVersion: v1
 kind: Pod
 metadata:
-  name: sc-pod2
+  name: security-context-demo-2
 spec:
+  securityContext:
+    runAsUser: 1000
   containers:
-  - name: sc-ctr2
+  - name: sc-demo-2
     image: gcr.io/google-samples/node-hello:1.0
     securityContext:
       runAsUser: 2000
-      allowPrivilegeEscalation: false
-	  
 
-kubectl create -f sc-ctr.yml
+To apply this file, use the following command:
+kubectl apply -f sc-demo-2.yaml
 
-kubectl get pods
-kubectl exec -it sc-pod2 -- sh
+To access the shell inside the pod, run the following command:
+kubectl exec -it security-context-demo-2 -- /bin/sh
+
+To check the applied security context on the container, run the following commands:
 ps aux
-exit
+id
 
-#Delete the resources that we created in this lab
-kubectl delete -f sc-pod.yml 
-kubectl delete -f sc-ctr.yml
+
+---------------------------------------------------
+Task 3: Set the security context for a container
+---------------------------------------------------
+File 3: sc-demo-3.yaml
+This YAML file demonstrates the addition of the NET_ADMIN capability to a container.
+
+vi sc-demo-3.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: security-context-demo-3
+spec:
+  containers:
+  - name: sc-demo-3
+    image: ubuntu
+    command: [ "sh", "-c", "sleep 1h" ]
+    securityContext:
+      capabilities:
+        add: ["NET_ADMIN"]
+
+To apply this file, use the following command:
+kubectl apply -f sc-demo-3.yaml
+
+To access the shell inside the pod, run the following command:
+kubectl exec -it security-context-demo-3 -- /bin/bash
+
+
+To install the required package, run the following commands inside the pod:
+apt update
+apt install iproute2
+
+#iptoute2 provides advanced IP routing and network devices configuration.
+
+To check the network interfaces, run the following command:
+ip link show
+
+To add an IP address to the eth0 network interface, use the following command:
+ip addr add 192.168.0.10/24 dev eth0
+
+To check the added IP address, run the following command:
+ip addr show eth0
 
 
 
