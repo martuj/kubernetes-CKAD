@@ -945,9 +945,10 @@ Task 2: Using WordPress and MySQL as Deployments(skip)
 --------------------------------------------------------
 kubectl create ns networkdemo 
 
-kubectl create -f http://files.cloudthat.training/devops/kubernetes-cka/mysql_deploy.yaml -n networkdemo
+kubectl create -f https://s3.ap-south-1.amazonaws.com/files.cloudthat.training/devops/kubernetes-cka/mysql_deploy.yaml -n networkdemo
 
-kubectl create -f http://files.cloudthat.training/devops/kubernetes-cka/wordpress_deploy.yaml -n networkdemo
+
+kubectl create -f https://s3.ap-south-1.amazonaws.com/files.cloudthat.training/devops/kubernetes-cka/wordpress_deploy.yaml -n networkdemo
 
 kubectl get pod,svc -n networkdemo 
 
