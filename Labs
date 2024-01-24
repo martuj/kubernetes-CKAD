@@ -1462,8 +1462,199 @@ kubectl delete -f  pod-antiaff.yaml
 ===================================================================================
 Lab 14: Installing WordPress with Helm
 
+Lab: 1 Install Helm in kubernetes Cluster 
+===========================================
+
+wget https://get.helm.sh/helm-v3.5.0-rc.2-linux-amd64.tar.gz
+
+tar -xzvf  helm-v3.5.0-rc.2-linux-amd64.tar.gz
+
+mv linux-amd64/helm /bin
+
+helm version
+
+
+Helm Commands 
+# this will print helm help
+helm
+
+# to see all available package in hub
+helm search hub
+
+# to list mysql or nginx charts
+helm search hub mysql 
+
+# to list all available repo
+helm repo list
+
+# add helm repo named bitnami
+helm repo add bitnami https://charts.bitnami.com/bitnami
+
+# search bitnami named repo in server
+helm search repo bitnami
+
+#update repo
+helm repo update
+
+# Search chart in specific repo
+helm search repo bitnami/nginx
+helm search repo –l bitnami/mysql   #list all available versions 
+helm search repo nginx --versions
+
+
+# To remove the repo
+helm repo remove bitnami
+helm repo list
+
+
+# add again helm repo named bitnami
+helm repo add bitnami https://charts.bitnami.com/bitnami
+
+
+# install nginx using chart 
+helm install mywebserver bitnami/nginx
+
+# install in specific namesape then first create name space then install 
+kubectl create ns dev
+helm install -n dev  mywebserver bitnami/nginx
+# helm show default name space by default
+helm list
+# to check in the specific name space
+helm list -n dev
+
+# delete nginx
+helm uninstall mywebserver
+
+# delete from specific name space
+helm uninstall mywebserver -n dev
+helm list -n dev
+helm list
+kubectl get pod
+
+
+# update the repo 
+helm install mywebserver bitnami/nginx
+helm list
+helm repo update
+helm list
+helm status mywebserver
+helm upgrade mywebserver bitnami/nginx		# --reuse-values
+helm status mywebserver
+helm list
+
+
+
+Lab: 2 Chart Structure
+====================================
+
+apt update && apt install tree -y
+
+helm create <Chart-Name>	# martuj-mychart
+
+
+controlplane $ tree mychart/
+mychart/
+|-- Chart.yaml
+|-- charts
+|-- templates
+|   |-- NOTES.txt
+|   |-- _helpers.tpl
+|   |-- deployment.yaml
+|   |-- hpa.yaml
+|   |-- ingress.yaml
+|   |-- service.yaml
+|   |-- serviceaccount.yaml
+|   `-- tests
+|       `-- test-connection.yaml
+`-- values.yaml
+
+
+Dry- Run
+helm install --debug --dry-run mychart ./mychart/
+helm install mychart ./mychart/
+helm get manifest mychart
+
+
+
+
+Lab: 3 Create Custom Chart 
+==========================
+
+mkdir -p myapp/charts && mkdir -p myapp/templates
+
+cd myapp
+
+vi Chart.yaml 
+apiVersion: v2
+name: mychart
+description: A Helm chart for Kubernetes
+type: application
+version: 0.1.0
+appVersion: "1.16.0"
+
+
+#create empty file
+touch values.yaml 
+ 
+
+vi templates/deployment.yaml 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mydep
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        ports:
+        - containerPort: 80
+
+
+
+vi templates/service.yaml 
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp-svc
+spec:
+  selector:
+    app: myapp
+  ports:
+  - protocol: TCP
+    port: 80
+  type: NodePort 
+
+
+
+$ tree
+.
+|-- Chart.yaml
+|-- charts
+|-- templates
+|   |-- deployment.yaml
+|   `-- service.yaml
+`-- values.yaml
+
+#type cd to comeout from the dir
+cd
+helm install mychart1 ./myapp
+kubectl get deployment 
+kubectl get pods
+
+helm uninstall mychart1
+
+
 -----------------------------------------------------------------------
-Task 1: Helm setup
+Task 1: Helm setup  (Self)
 -----------------------------------------------------------------------
 #Download the shell script for the installation of the Helm package manager and run it.
 wget  https://s3.ap-south-1.amazonaws.com/files.cloudthat.training/devops/kubernetes-essentials/helm.sh
