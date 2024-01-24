@@ -1255,6 +1255,49 @@ kubectl label nodes <node_name> disktype-
 
 kubectl get nodes --show-labels | grep ssd 
 
+Taint and Toleration
+--------------------------
+Taint a node with the Noschedule taint effect and set the key-value pair 
+
+Use the following command to apply the taint to the desired node:
+
+kubectl taint nodes <node_name> key1=value1:NoSchedule
+
+kubectl describe node node01
+
+Create a pod and check the node on which it is scheduled.
+
+kubectl run test --image=nginx
+kubectl get pod
+kubectl get pod -o wide
+
+Create a pod and add a toleration to it with the following specifications:
+Key: key1
+Operator: Equal
+Value: value1
+Effect: Noschedule
+
+Use the following YAML definition to create the pod with the toleration:
+
+vi taintpod.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mypod1
+spec:
+  containers:
+  - name: mycontainer
+    image: nginx
+  tolerations:
+   - key: run
+     operator: Equal
+     value: mypod
+     effect: NoSchedule
+
+Remove the taint effect from the node that was previously tainted.
+
+kubectl taint nodes <node_name> key1=value1:NoSchedule-
 
 ====================================================================================
 Lab 13: Advanced Pod Scheduling
