@@ -210,7 +210,7 @@ spec:
         - echo HELLO WORLD !!!!!
       restartPolicy: Never
 
-kubectl create -f job.yaml
+kubectl create -f job-pod.yaml
 kubectl get jobs
 kubectl get pods
 
