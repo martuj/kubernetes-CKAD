@@ -304,7 +304,7 @@ apt update && apt install curl -y
 curl 'http://localhost:80/app.txt'
  
 ==============================================================================
-Lab 4 Canary Deployment on Kubernetes 
+Lab 4  Blue/Green Deployment on Kubernetes 
 
 vi web-blue.yaml
 
