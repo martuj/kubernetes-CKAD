@@ -765,8 +765,8 @@ spec:
       - containerPort: 80
 	  
 kubectl create -f rq-pod.yaml
-kubectl describe ns resourcequota
-kubectl get resourcequota -n quotas -o yaml
+kubectl describe ns quota
+kubectl get quota -n quotas -o yaml
 
 -------------------------------------------------
 Task 4: Limiting Number of Pods
