@@ -737,7 +737,7 @@ spec:
     limits.memory: 2Gi
 
 kubectl create -f rq-quotas.yaml
-kubectl describe ns resourcequota
+kubectl describe ns quota
 
 
 ------------------------------------------------
