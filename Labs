@@ -978,7 +978,7 @@ spec:
 		  
 
 #before applying this yaml describe networkpolicies to check rule
-
+kubectl apply -f np-pod-label-allow.yml
 kubectl describe networkpolicies backend-policy
 
 kubectl apply -f np-pod-label-allow.yml
