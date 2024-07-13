@@ -1162,6 +1162,19 @@ kubectl apply -f sarole.yaml
 
 To associate the Role with the Service Account, create a RoleBinding. 
 
+vi mysa.yml
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  annotations:
+    kubernetes.io/enforce-mountable-secrets: "true"
+  name: mysa
+  namespace: default
+
+kubectl aaply -f mysa
+kubectl get sa
+
 vi sarolebinding.yaml
 
 apiVersion: rbac.authorization.k8s.io/v1
